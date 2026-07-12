@@ -1,0 +1,43 @@
+name = "nepse-alert"
+main = "src/index.ts"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain — requires the zone bishalstha.info.np active in this CF account.
+routes = [
+  { pattern = "stock.bishalstha.info.np", custom_domain = true },
+]
+
+# --- Scheduled polling (Cloudflare crons are UTC; NPT = UTC+5:45; market Sun–Thu) ---
+# 11:00 NPT open snapshot = 05:15 UTC ; 15:00 NPT close snapshot = 09:15 UTC
+# Watched-securities poll every 30 min during market hours (05:15–09:15 UTC)
+# EOD job (history append, screener, news digest) ~09:30 UTC
+# NOTE: Cloudflare day-of-week is 1-7 with 1=Sunday; names are safest.
+# NEPSE trades Mon–Fri (closed Sat/Sun) = mon-fri. Hours 11:00–15:00 NPT.
+# (Standard-cron numeric ranges like 0-4 are REJECTED by Cloudflare.)
+[triggers]
+crons = [
+  "15 5 * * mon-fri",     # market open (11:00 NPT) — full snapshot
+  "*/30 5-9 * * mon-fri", # in-hours — watched securities poll
+  "15 9 * * mon-fri",     # market close (15:00 NPT) — full snapshot
+  "30 9 * * mon-fri",     # EOD — daily_ohlc append, screener, news digest
+]
+
+# --- D1 (relational store) ---
+[[d1_databases]]
+binding = "DB"
+database_name = "nepse_alert"
+database_id = "d4759d5d-cd3a-4e18-811c-6a3939100e49"
+migrations_dir = "migrations"
+
+# --- KV (hot cache: latest prices + alert dedupe) ---
+[[kv_namespaces]]
+binding = "CACHE"
+id = "ddc6905edfa345ce80219d53ba729182"
+
+# --- Secrets (set via `wrangler secret put <NAME>`) ---
+# TELEGRAM_BOT_TOKEN   — from @BotFather
+# TELEGRAM_WEBHOOK_SECRET — random string; validates incoming webhook calls
+
+[observability]
+enabled = true

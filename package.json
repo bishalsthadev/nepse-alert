@@ -1,0 +1,25 @@
+{
+  "name": "nepse-alert",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Telegram-first NEPSE alerting, portfolio, news, and screener — on Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:remote": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply nepse_alert --local",
+    "db:migrate:remote": "wrangler d1 migrations apply nepse_alert --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.110.0"
+  },
+  "dependencies": {
+    "grammy": "^1.30.0"
+  }
+}
