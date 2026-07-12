@@ -96,6 +96,8 @@ export const DASHBOARD_HTML = `<!doctype html>
     <div class="movers">
       <div class="card mv"><label>📈 Top gainers</label><div id="gainers"><p class="muted">Loading…</p></div></div>
       <div class="card mv"><label>📉 Top losers</label><div id="losers"><p class="muted">Loading…</p></div></div>
+      <div class="card mv"><label>💵 Top turnover</label><div id="turnover"><p class="muted">Loading…</p></div></div>
+      <div class="card mv"><label>🔁 Most traded (volume)</label><div id="volume"><p class="muted">Loading…</p></div></div>
     </div>
 
     <!-- Personal panel -->
@@ -189,6 +191,16 @@ export const DASHBOARD_HTML = `<!doctype html>
       }
       el("gainers").innerHTML = moverRows(mv.gainers);
       el("losers").innerHTML = moverRows(mv.losers);
+
+      var tl = d.topLists || {turnover:[], volume:[]};
+      function compact(n){ return (n==null||isNaN(n)) ? "—" : Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:2}).format(n); }
+      function rankedRows(list, prefix){
+        if(!list || !list.length) return '<p class="muted">No data.</p>';
+        return '<table><tbody>'+list.map(function(x){
+          return '<tr><td><b>'+x.symbol+'</b></td><td>'+fmt(x.price)+'</td><td><b>'+(prefix||"")+compact(x.value)+'</b></td></tr>'; }).join("")+'</tbody></table>';
+      }
+      el("turnover").innerHTML = rankedRows(tl.turnover, "Rs ");
+      el("volume").innerHTML = rankedRows(tl.volume, "");
 
       var news=d.news||[];
       el("news").innerHTML = news.length ? news.map(function(n){

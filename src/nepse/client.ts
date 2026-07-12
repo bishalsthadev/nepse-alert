@@ -36,6 +36,13 @@ export interface Mover {
   pctChange: number;
 }
 
+export interface Ranked {
+  symbol: string;
+  name: string;
+  value: number; // turnover (Rs) or shares traded
+  price: number;
+}
+
 /** One security's latest trade figures, normalized. */
 export interface LivePrice {
   symbol: string;
@@ -118,6 +125,27 @@ export class NepseClient {
     const gainers = g.ok ? map((await g.json()) as any[]).sort((a, b) => b.pctChange - a.pctChange).slice(0, limit) : [];
     const losers = l.ok ? map((await l.json()) as any[]).sort((a, b) => a.pctChange - b.pctChange).slice(0, limit) : [];
     return { gainers, losers };
+  }
+
+  /** Top securities by turnover (Rs) and by shares traded ("most traded"). */
+  async getTopLists(limit = 5): Promise<{ turnover: Ranked[]; volume: Ranked[] }> {
+    const [t, v] = await Promise.all([
+      this.authed("/api/nots/top-ten/turnover"),
+      this.authed("/api/nots/top-ten/trade"),
+    ]);
+    const turnover = t.ok
+      ? ((await t.json()) as any[])
+          .map((r) => ({ symbol: r.symbol, name: r.securityName, value: Number(r.turnover), price: Number(r.closingPrice) }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, limit)
+      : [];
+    const volume = v.ok
+      ? ((await v.json()) as any[])
+          .map((r) => ({ symbol: r.symbol, name: r.securityName, value: Number(r.shareTraded), price: Number(r.closingPrice) }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, limit)
+      : [];
+    return { turnover, volume };
   }
 
   async getNepseIndex(): Promise<IndexDetail[]> {
