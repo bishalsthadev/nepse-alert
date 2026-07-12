@@ -278,7 +278,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   });
 
   // ---- init ----
-  loadSummary(); setInterval(loadSummary, 60000);
+  loadSummary(); setInterval(loadSummary, 120000); // matches the /api/summary KV cooldown
   loadSecurities().then(function(){
     holdCombo = attachCombo(document.querySelector('[data-combo="hold"]'));
     alertCombo = attachCombo(document.querySelector('[data-combo="alert"]'));

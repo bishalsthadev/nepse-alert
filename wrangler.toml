@@ -18,7 +18,7 @@ routes = [
 [triggers]
 crons = [
   "15 5 * * mon-fri",     # market open (11:00 NPT) — full snapshot
-  "*/30 5-9 * * mon-fri", # in-hours — watched securities poll
+  "*/15 5-9 * * mon-fri", # in-hours — watched securities poll (every 15 min)
   "15 9 * * mon-fri",     # market close (15:00 NPT) — full snapshot
   "30 9 * * mon-fri",     # EOD — daily_ohlc append, screener, news digest
 ]
