@@ -108,6 +108,32 @@ export class NepseClient {
     return (await res.json()) as MarketStatus;
   }
 
+  /**
+   * Daily OHLC history for a security (up to ~1 year), via the graph endpoint
+   * (POST with the computed body id). Newest last. Powers charts + screener backfill.
+   */
+  async getPriceHistory(
+    securityId: number,
+    marketId: number,
+    limit = 180,
+  ): Promise<{ date: string; open: number; high: number; low: number; close: number; volume: number }[]> {
+    const res = await this.authed(`/api/nots/market/graphdata/${securityId}`, {
+      method: "POST",
+      body: JSON.stringify({ id: calculateBodyId(marketId) }),
+    });
+    if (!res.ok) throw new Error(`graphdata failed: ${res.status}`);
+    const rows = (await res.json()) as any[];
+    if (!Array.isArray(rows)) return [];
+    return rows.slice(-limit).map((r) => ({
+      date: String(r.businessDate).slice(0, 10),
+      open: Number(r.openPrice),
+      high: Number(r.highPrice),
+      low: Number(r.lowPrice),
+      close: Number(r.closePrice ?? r.lastTradedPrice),
+      volume: Number(r.totalTradedQuantity),
+    }));
+  }
+
   /** Top gainers & losers for the day (NEPSE returns last session when closed). */
   async getTopMovers(limit = 5): Promise<{ gainers: Mover[]; losers: Mover[] }> {
     const map = (rows: any[]): Mover[] =>

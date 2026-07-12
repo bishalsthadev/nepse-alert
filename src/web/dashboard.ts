@@ -40,6 +40,10 @@ export const DASHBOARD_HTML = `<!doctype html>
   .mv label { margin-bottom:8px; }
   .mv table { width:100%; }
   .mv td { padding:6px 4px; }
+  .chart-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+  .chart-meta { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .chart-meta b { color:var(--fg); }
+  #chart svg { width:100%; height:auto; display:block; }
   h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:26px 0 12px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
   label { display:block; font-size:12px; color:var(--muted); margin:0 0 4px; }
@@ -98,6 +102,15 @@ export const DASHBOARD_HTML = `<!doctype html>
       <div class="card mv"><label>📉 Top losers</label><div id="losers"><p class="muted">Loading…</p></div></div>
       <div class="card mv"><label>💵 Top turnover</label><div id="turnover"><p class="muted">Loading…</p></div></div>
       <div class="card mv"><label>🔁 Most traded (volume)</label><div id="volume"><p class="muted">Loading…</p></div></div>
+    </div>
+
+    <div class="card">
+      <div class="chart-head">
+        <label style="margin:0;">📉 Price chart</label>
+        <div class="combo" data-combo="chart" style="max-width:280px;flex:1;"><input type="text" placeholder="Search a stock…" autocomplete="off" /><div class="combo-list hidden"></div></div>
+      </div>
+      <div id="chartMeta" class="chart-meta"></div>
+      <div id="chart"><p class="muted">Pick a stock to see ~6 months of daily closes.</p></div>
     </div>
 
     <!-- Personal panel -->
@@ -209,7 +222,7 @@ export const DASHBOARD_HTML = `<!doctype html>
   }
 
   // ---- searchable combobox ----
-  function attachCombo(root){
+  function attachCombo(root, onPick){
     var input = root.querySelector("input");
     var list = root.querySelector(".combo-list");
     var selected = "";
@@ -227,6 +240,7 @@ export const DASHBOARD_HTML = `<!doctype html>
     list.addEventListener("mousedown", function(e){
       var opt = e.target.closest(".opt"); if(!opt) return;
       selected = opt.getAttribute("data-sym"); input.value = selected; list.classList.add("hidden");
+      if(onPick) onPick(selected);
     });
     return { get: function(){ return selected || input.value.trim().toUpperCase(); }, clear: function(){ selected=""; input.value=""; } };
   }
@@ -234,6 +248,42 @@ export const DASHBOARD_HTML = `<!doctype html>
 
   function loadSecurities(){
     return fetch("/api/securities").then(function(r){return r.json();}).then(function(list){ securities = Array.isArray(list)?list:[]; });
+  }
+
+  // ---- price chart (inline SVG) ----
+  function drawChart(points){
+    var W=680, Hh=160, pad=8;
+    var closes = points.map(function(p){ return p.close; });
+    var min=Math.min.apply(null,closes), max=Math.max.apply(null,closes), range=(max-min)||1, n=closes.length;
+    var xs=function(i){ return pad + (i/(n-1))*(W-2*pad); };
+    var ys=function(v){ return pad + (1-(v-min)/range)*(Hh-2*pad); };
+    var line = closes.map(function(v,i){ return (i?"L":"M")+xs(i).toFixed(1)+" "+ys(v).toFixed(1); }).join(" ");
+    var up = closes[n-1] >= closes[0];
+    var stroke = up ? "var(--up)" : "var(--down)";
+    var area = line + " L "+xs(n-1).toFixed(1)+" "+(Hh-pad)+" L "+xs(0).toFixed(1)+" "+(Hh-pad)+" Z";
+    return '<svg viewBox="0 0 '+W+' '+Hh+'" preserveAspectRatio="none" role="img">'+
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0%" stop-color="'+stroke+'" stop-opacity="0.22"/>'+
+        '<stop offset="100%" stop-color="'+stroke+'" stop-opacity="0"/></linearGradient></defs>'+
+      '<path d="'+area+'" fill="url(#g)"/>'+
+      '<path d="'+line+'" fill="none" stroke="'+stroke+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
+      '<circle cx="'+xs(n-1).toFixed(1)+'" cy="'+ys(closes[n-1]).toFixed(1)+'" r="3.5" fill="'+stroke+'"/></svg>';
+  }
+
+  function loadChart(sym){
+    el("chartMeta").innerHTML = "";
+    el("chart").innerHTML = '<p class="muted">Loading '+sym+'…</p>';
+    fetch("/api/history?symbol="+encodeURIComponent(sym)).then(function(r){return r.json();}).then(function(d){
+      var pts = d.points||[];
+      if(pts.length < 2){ el("chart").innerHTML='<p class="muted">Not enough history for '+sym+'.</p>'; return; }
+      var first=pts[0].close, last=pts[pts.length-1].close, chg=last-first, pctv=first?(chg/first*100):0;
+      el("chartMeta").innerHTML =
+        '<span><b>'+sym+'</b></span>'+
+        '<span>Last <b>'+fmt(last)+'</b></span>'+
+        '<span class="'+cls(chg)+'">'+arrow(chg)+' '+fmt(chg)+' ('+fmt(pctv)+'%) · '+pts.length+'d</span>'+
+        '<span>H '+fmt(Math.max.apply(null,pts.map(function(p){return p.close;})))+' · L '+fmt(Math.min.apply(null,pts.map(function(p){return p.close;})))+'</span>';
+      el("chart").innerHTML = drawChart(pts);
+    }).catch(function(){ el("chart").innerHTML='<p class="err">Failed to load chart.</p>'; });
   }
 
   // ---- personal: portfolio + alerts ----
@@ -314,6 +364,8 @@ export const DASHBOARD_HTML = `<!doctype html>
   loadSecurities().then(function(){
     holdCombo = attachCombo(document.querySelector('[data-combo="hold"]'));
     alertCombo = attachCombo(document.querySelector('[data-combo="alert"]'));
+    attachCombo(document.querySelector('[data-combo="chart"]'), loadChart);
+    loadChart("NABIL"); // default so the chart is populated on first view
   });
   if(key()){ unlock().catch(function(){ localStorage.removeItem(KEYNAME); }); }
 })();

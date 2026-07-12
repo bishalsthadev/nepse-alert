@@ -31,6 +31,34 @@ export async function handleApi(request: Request, env: Env, url: URL): Promise<R
   const repo = new Repo(env.DB);
   const nepse = new NepseClient(env.CACHE);
 
+  // --- public: daily price history for a symbol (charts) ---
+  if (p === "/api/history" && request.method === "GET") {
+    const symbol = (url.searchParams.get("symbol") ?? "").toUpperCase();
+    if (!symbol) return Response.json({ error: "symbol required" }, { status: 400 });
+    const cacheKey = `hist:${symbol}`;
+    const cached = await env.CACHE.get(cacheKey);
+    if (cached) {
+      return new Response(cached, {
+        headers: { "content-type": "application/json", "cache-control": "public, max-age=3600" },
+      });
+    }
+    const sid = await resolveSecurityId(symbol, nepse, repo);
+    if (sid === null) return Response.json({ error: `unknown symbol ${symbol}` }, { status: 404 });
+    const market = await nepse.getMarketStatus().catch(() => ({ id: 0 }) as any);
+    const series = await nepse.getPriceHistory(sid, market.id, 180).catch(() => []);
+    // Warm the screener's history for this symbol while we're here.
+    if (series.length > 0) {
+      await repo
+        .upsertDailyOhlc(series.map((s) => ({ symbol, date: s.date, open: s.open, high: s.high, low: s.low, close: s.close, volume: s.volume })))
+        .catch(() => {});
+    }
+    const payload = JSON.stringify({ symbol, points: series.map((s) => ({ date: s.date, close: s.close })) });
+    await env.CACHE.put(cacheKey, payload, { expirationTtl: 3600 });
+    return new Response(payload, {
+      headers: { "content-type": "application/json", "cache-control": "public, max-age=3600" },
+    });
+  }
+
   // --- public: securities list for the searchable dropdown ---
   if (p === "/api/securities" && request.method === "GET") {
     let list = await repo.listAllSecurities();
