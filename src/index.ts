@@ -30,7 +30,7 @@ export default {
     // many browser tabs refresh — this is the fetch cooldown.
     if (url.pathname === "/api/summary") {
       const SUMMARY_TTL = 120; // seconds
-      const cached = await env.CACHE.get("summary:v1");
+      const cached = await env.CACHE.get("summary:v3");
       if (cached) {
         return new Response(cached, {
           headers: {
@@ -43,9 +43,10 @@ export default {
       const nepse = new NepseClient(env.CACHE);
       const repo = new Repo(env.DB);
       try {
-        const [indices, marketStatus] = await Promise.all([
+        const [indices, marketStatus, movers] = await Promise.all([
           nepse.getNepseIndex().catch(() => []),
           nepse.getMarketStatus().catch(() => null),
+          nepse.getTopMovers(5).catch(() => ({ gainers: [], losers: [] })),
         ]);
         // News comes from D1 (populated by the EOD cron) — never scrape on a
         // dashboard hit unless the table is completely empty (first-ever load).
@@ -54,8 +55,8 @@ export default {
           await refreshNews(env).catch(() => {});
           news = await repo.recentNews(12);
         }
-        const payload = JSON.stringify({ indices, marketStatus, news });
-        await env.CACHE.put("summary:v1", payload, { expirationTtl: SUMMARY_TTL });
+        const payload = JSON.stringify({ indices, marketStatus, movers, news });
+        await env.CACHE.put("summary:v3", payload, { expirationTtl: SUMMARY_TTL });
         return new Response(payload, {
           headers: { "content-type": "application/json", "cache-control": `public, max-age=${SUMMARY_TTL}`, "x-cache": "miss" },
         });

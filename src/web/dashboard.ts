@@ -35,6 +35,11 @@ export const DASHBOARD_HTML = `<!doctype html>
   .cell .name { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .cell .num { font-size:18px; font-weight:600; margin-top:2px; }
   .cell .sub { font-size:12px; font-weight:600; margin-top:1px; }
+  .movers { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px; }
+  @media (max-width:620px){ .movers { grid-template-columns:1fr; } }
+  .mv label { margin-bottom:8px; }
+  .mv table { width:100%; }
+  .mv td { padding:6px 4px; }
   h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:26px 0 12px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
   label { display:block; font-size:12px; color:var(--muted); margin:0 0 4px; }
@@ -87,6 +92,11 @@ export const DASHBOARD_HTML = `<!doctype html>
       <div class="chg" id="idxChg"></div>
     </div>
     <div class="grid" id="subIdx"><div class="muted">Loading indices…</div></div>
+
+    <div class="movers">
+      <div class="card mv"><label>📈 Top gainers</label><div id="gainers"><p class="muted">Loading…</p></div></div>
+      <div class="card mv"><label>📉 Top losers</label><div id="losers"><p class="muted">Loading…</p></div></div>
+    </div>
 
     <!-- Personal panel -->
     <h2>My holdings &amp; alerts</h2>
@@ -170,6 +180,16 @@ export const DASHBOARD_HTML = `<!doctype html>
       el("subIdx").innerHTML = sub.length ? sub.map(function(i){
         return '<div class="cell"><div class="name">'+i.index+'</div><div class="num">'+fmt(i.currentValue)+
           '</div><div class="sub '+cls(i.change)+'">'+arrow(i.change)+' '+fmt(i.perChange)+'%</div></div>';}).join("") : '<div class="muted">No index data.</div>';
+      var mv = d.movers || {gainers:[], losers:[]};
+      function moverRows(list){
+        if(!list || !list.length) return '<p class="muted">No data.</p>';
+        return '<table><tbody>'+list.map(function(m){
+          return '<tr><td><b>'+m.symbol+'</b></td><td>'+fmt(m.ltp)+'</td><td class="'+cls(m.change)+'">'+
+            arrow(m.change)+' '+fmt(m.pctChange)+'%</td></tr>'; }).join("")+'</tbody></table>';
+      }
+      el("gainers").innerHTML = moverRows(mv.gainers);
+      el("losers").innerHTML = moverRows(mv.losers);
+
       var news=d.news||[];
       el("news").innerHTML = news.length ? news.map(function(n){
         return '<li><span class="tag">'+(n.category==="news"?"":n.category)+'</span><a href="'+n.url+'" target="_blank" rel="noopener">'+n.title+'</a></li>';}).join("") : '<li class="muted">No news yet.</li>';

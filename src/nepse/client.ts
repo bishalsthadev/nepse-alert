@@ -28,6 +28,14 @@ export interface MarketStatus {
   id: number;
 }
 
+export interface Mover {
+  symbol: string;
+  name: string;
+  ltp: number;
+  change: number;
+  pctChange: number;
+}
+
 /** One security's latest trade figures, normalized. */
 export interface LivePrice {
   symbol: string;
@@ -56,9 +64,9 @@ function baseHeaders(token?: string): Record<string, string> {
 export class NepseClient {
   constructor(private cache?: KVNamespace) {}
 
-  /** Fetch (or reuse from KV) a valid access token. */
-  async getToken(): Promise<string> {
-    if (this.cache) {
+  /** Fetch (or reuse from KV) a valid access token. Pass force to bypass cache. */
+  async getToken(force = false): Promise<string> {
+    if (!force && this.cache) {
       const cached = await this.cache.get(TOKEN_KV_KEY);
       if (cached) return cached;
     }
@@ -74,18 +82,42 @@ export class NepseClient {
     return token;
   }
 
+  // NEPSE occasionally returns 401 UNAUTHORIZED ACCESS even for a valid token
+  // (anti-bot). Retry once with a freshly-minted token before giving up.
   private async authed(path: string, init?: RequestInit): Promise<Response> {
-    const token = await this.getToken();
-    return fetch(`${BASE_URL}${path}`, {
-      ...init,
-      headers: { ...baseHeaders(token), ...(init?.headers as Record<string, string>) },
-    });
+    const req = (token: string) =>
+      fetch(`${BASE_URL}${path}`, {
+        ...init,
+        headers: { ...baseHeaders(token), ...(init?.headers as Record<string, string>) },
+      });
+    let res = await req(await this.getToken());
+    if (res.status === 401) res = await req(await this.getToken(true));
+    return res;
   }
 
   async getMarketStatus(): Promise<MarketStatus> {
     const res = await this.authed("/api/nots/nepse-data/market-open");
     if (!res.ok) throw new Error(`market-open failed: ${res.status}`);
     return (await res.json()) as MarketStatus;
+  }
+
+  /** Top gainers & losers for the day (NEPSE returns last session when closed). */
+  async getTopMovers(limit = 5): Promise<{ gainers: Mover[]; losers: Mover[] }> {
+    const map = (rows: any[]): Mover[] =>
+      rows.map((r) => ({
+        symbol: r.symbol,
+        name: r.securityName,
+        ltp: Number(r.ltp),
+        change: Number(r.pointChange),
+        pctChange: Number(r.percentageChange),
+      }));
+    const [g, l] = await Promise.all([
+      this.authed("/api/nots/top-ten/top-gainer"),
+      this.authed("/api/nots/top-ten/top-loser"),
+    ]);
+    const gainers = g.ok ? map((await g.json()) as any[]).sort((a, b) => b.pctChange - a.pctChange).slice(0, limit) : [];
+    const losers = l.ok ? map((await l.json()) as any[]).sort((a, b) => a.pctChange - b.pctChange).slice(0, limit) : [];
+    return { gainers, losers };
   }
 
   async getNepseIndex(): Promise<IndexDetail[]> {
